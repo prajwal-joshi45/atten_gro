@@ -1,7 +1,8 @@
+Flask
+opencv-python-headless
+face-recognition
+dlib
 numpy
-opencv-contrib-python
-opencv-python
-openpyxl
 pandas
-pillow
-pyttsx3
+Pillow
+cmake
