@@ -33,14 +33,31 @@ jobs:
       - name: Install dependencies
         run: |
           source venv/bin/activate
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f project_requirement.txt ]; then pip install -r project_requirement.txt; fi
+          
+          # Clean requirements files first
+          if [ -f requirements.txt ]; then
+            # Remove any non-package lines from requirements.txt
+            grep -v "^#\|^-\|^$\|---" requirements.txt > clean_requirements.txt || echo "flask" > clean_requirements.txt
+            pip install -r clean_requirements.txt
+          fi
+          
+          if [ -f project_requirement.txt ]; then
+            # Remove any non-package lines from project_requirement.txt
+            grep -v "^#\|^-\|^$\|---" project_requirement.txt > clean_project_requirements.txt || echo "" > clean_project_requirements.txt
+            if [ -s clean_project_requirements.txt ]; then
+              pip install -r clean_project_requirements.txt
+            fi
+          fi
+          
+          # Install core dependencies
           pip install opencv-python-headless face-recognition numpy pandas flask
-        
+      
       - name: Clean up and package
         run: |
-          rm -rf venv/ .git/ __pycache__/
+          rm -rf venv/ .git/ **pycache**/
           find . -name "*.pyc" -delete
+          # Remove temporary clean files
+          rm -f clean_requirements.txt clean_project_requirements.txt
           zip -r release.zip .
       
       - name: Upload artifact
