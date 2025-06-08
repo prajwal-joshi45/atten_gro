@@ -56,20 +56,16 @@ jobs:
         with:
           name: python-app
 
-      - name: Deploy to server
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          USERNAME: ${{ secrets.SERVER_USERNAME }}
-        run: |
-          echo "$SSH_PRIVATE_KEY" > private_key.pem
-          chmod 600 private_key.pem
-          scp -o StrictHostKeyChecking=no -i private_key.pem release.zip $USERNAME@$SERVER_IP:/home/$USERNAME/
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $USERNAME@$SERVER_IP << 'EOF'
-            unzip -o release.zip -d python-app
-            cd python-app
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt
-            nohup python3 main.py > output.log 2>&1 &
-          EOF
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8EF59EA70AA94E74ADC51CE1C6546510 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_A15D4D9615724C7EB487B20B84D49087 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_85BD05D8FEF241A69A35A52135D1199F }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'attendgrow'
+          slot-name: 'Production'
+          package: release.zip
