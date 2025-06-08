@@ -1,5 +1,4 @@
-# Azure Web App Deployment for Attendance System (atten_gro)
-name: Build and deploy Attendance App to Azure Web App - atten-gro
+name: Build and deploy Attendance App to Azure Web App
 
 on:
   push:
@@ -11,8 +10,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     
     steps:
       - uses: actions/checkout@v4
@@ -20,71 +17,33 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'  # Face recognition works better with 3.9
+          python-version: '3.9'
       
-      - name: Install system dependencies for OpenCV and face recognition
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libopencv-dev \
-            python3-opencv \
-            libgl1-mesa-glx \
-            libglib2.0-0 \
-            libsm6 \
-            libxext6 \
-            libxrender-dev \
-            libgomp1 \
-            cmake \
-            build-essential
+          sudo apt-get install -y libopencv-dev python3-opencv cmake build-essential
       
-      - name: Create and start virtual environment
+      - name: Create virtual environment
         run: |
           python -m venv venv
           source venv/bin/activate
-          echo "$GITHUB_WORKSPACE/venv/bin" >> $GITHUB_PATH
+          pip install --upgrade pip wheel setuptools
       
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           source venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install wheel setuptools
-          # Install requirements from both files
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f project_requirement.txt ]; then pip install -r project_requirement.txt; fi
-          # Common face recognition dependencies
-          pip install opencv-python-headless dlib face-recognition numpy pandas
+          pip install opencv-python-headless face-recognition numpy pandas flask
         
-      - name: Verify installation
+      - name: Clean up and package
         run: |
-          source venv/bin/activate
-          python -c "import cv2; print('OpenCV version:', cv2.__version__)"
-          python -c "import face_recognition; print('Face recognition imported successfully')"
-        continue-on-error: true
-      
-      - name: Create deployment package
-        run: |
-          # Remove unnecessary files for deployment
-          rm -rf venv/
-          rm -rf .git/
-          rm -rf __pycache__/
+          rm -rf venv/ .git/ __pycache__/
           find . -name "*.pyc" -delete
-          find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-          
-          # Create startup script for Azure
-          cat > startup.py << 'EOF'
-import os
-import sys
-from attendance import app
-
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port, debug=False)
-EOF
-          
-          # Create zip file for deployment
-          zip -r release.zip . -x "*.git*" "*venv*" "*__pycache__*" "*.pyc"
+          zip -r release.zip .
       
-      - name: Upload artifact for deployment jobs
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: python-app
@@ -101,12 +60,12 @@ EOF
       contents: read
     
     steps:
-      - name: Download artifact from build job
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: python-app
       
-      - name: Unzip artifact for deployment
+      - name: Unzip artifact
         run: unzip release.zip
       
       - name: Login to Azure
@@ -116,9 +75,9 @@ EOF
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
       
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'atten-gro'  # Replace with your actual Azure App Service name
+          app-name: 'atten-gro'
           slot-name: 'Production'
