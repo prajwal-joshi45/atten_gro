@@ -1,49 +1,94 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
-
-name: Build and deploy Python app to Azure Web App - attendgrow
+# Azure Web App Deployment for Attendance System (atten_gro)
+name: Build and deploy Attendance App to Azure Web App - atten-gro
 
 on:
   push:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
-
+      contents: read
+    
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
-
+          python-version: '3.9'  # Face recognition works better with 3.9
+      
+      - name: Install system dependencies for OpenCV and face recognition
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libopencv-dev \
+            python3-opencv \
+            libgl1-mesa-glx \
+            libglib2.0-0 \
+            libsm6 \
+            libxext6 \
+            libxrender-dev \
+            libgomp1 \
+            cmake \
+            build-essential
+      
       - name: Create and start virtual environment
         run: |
           python -m venv venv
           source venv/bin/activate
+          echo "$GITHUB_WORKSPACE/venv/bin" >> $GITHUB_PATH
       
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: |
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install wheel setuptools
+          # Install requirements from both files
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f project_requirement.txt ]; then pip install -r project_requirement.txt; fi
+          # Common face recognition dependencies
+          pip install opencv-python-headless dlib face-recognition numpy pandas
         
-      # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
+      - name: Verify installation
+        run: |
+          source venv/bin/activate
+          python -c "import cv2; print('OpenCV version:', cv2.__version__)"
+          python -c "import face_recognition; print('Face recognition imported successfully')"
+        continue-on-error: true
+      
+      - name: Create deployment package
+        run: |
+          # Remove unnecessary files for deployment
+          rm -rf venv/
+          rm -rf .git/
+          rm -rf __pycache__/
+          find . -name "*.pyc" -delete
+          find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          
+          # Create startup script for Azure
+          cat > startup.py << 'EOF'
+import os
+import sys
+from attendance import app
 
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
-
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+EOF
+          
+          # Create zip file for deployment
+          zip -r release.zip . -x "*.git*" "*venv*" "*__pycache__*" "*.pyc"
+      
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            release.zip
-            !venv/
+          path: release.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -52,30 +97,28 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
-
+      id-token: write
+      contents: read
+    
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
-
+      
       - name: Unzip artifact for deployment
         run: unzip release.zip
-
       
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8EF59EA70AA94E74ADC51CE1C6546510 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_A15D4D9615724C7EB487B20B84D49087 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_85BD05D8FEF241A69A35A52135D1199F }}
-
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
+      
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'attendgrow'
+          app-name: 'atten-gro'  # Replace with your actual Azure App Service name
           slot-name: 'Production'
-          
