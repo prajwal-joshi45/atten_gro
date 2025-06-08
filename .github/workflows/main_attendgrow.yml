@@ -12,38 +12,41 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-
+          
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libopencv-dev python3-opencv cmake build-essential
-
+          
       - name: Set up virtual environment
         run: |
           python -m venv venv
           source venv/bin/activate
           pip install --upgrade pip wheel setuptools
-
+          
       - name: Install dependencies from requirements.txt
         run: |
           source venv/bin/activate
           pip install -r requirements.txt
-
+          
       - name: Clean up and package
         run: |
-          rm -rf venv/ .git/ __pycache__/
+          # Remove virtual environment and git files
+          rm -rf venv/ .git/
+          # Remove Python cache files
+          find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
           find . -name "*.pyc" -delete
-          zip -r release.zip .
-
+          # Create deployment package
+          zip -r release.zip . -x "*.git*" "*__pycache__*" "*.pyc"
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,23 +56,25 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-
+    environment: production  # Add environment for better organization
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: python-app
-
+          path: ./
+          
       - name: Login to Azure
         uses: azure/login@v2
         with:
+          auth-type: IDENTITY
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8EF59EA70AA94E74ADC51CE1C6546510 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_A15D4D9615724C7EB487B20B84D49087 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_85BD05D8FEF241A69A35A52135D1199F }}
-
+          
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'attendgrow'
           slot-name: 'Production'
-          package: release.zip
+          package: './release.zip'
